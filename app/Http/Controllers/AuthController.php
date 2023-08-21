@@ -95,7 +95,7 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-       if( $request->username != 'emindo') {
+       if( $request->username != 'emiindo') {
         return response()->json(['message' => 'Unauthorized'], 401);
        }
 
