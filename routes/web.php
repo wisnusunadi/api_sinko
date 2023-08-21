@@ -14,7 +14,7 @@
 */
 
 $router->get('/', function () use ($router) {
-    return ('API Sinko');
+    return ('PT Sinko Prima Alloy | IT');
 });
 
 $router->group(['middleware' => 'auth','prefix' => 'api'], function ($router)
