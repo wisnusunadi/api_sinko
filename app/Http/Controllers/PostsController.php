@@ -10,6 +10,7 @@ use App\Models\Logistik;
 use App\Models\NoseriBarangJadi;
 use App\Models\NoseriCoo;
 use App\Models\PenjualanProduk;
+use App\Models\Pesanan;
 use App\Models\SaveResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -126,55 +127,127 @@ class PostsController extends Controller
     public function coo()
     {
         $save_response = SaveResponse::where(['tipe' => 'coo', 'response' => 'ok', 'method' => 'post'])->pluck('parameter');
-        $get_coo = NoseriCoo::select('noseri_coo.id',)
-            ->Join('noseri_logistik', 'noseri_logistik.id', '=', 'noseri_coo.noseri_logistik_id')
-            ->Join('detail_logistik', 'detail_logistik.id', '=', 'noseri_logistik.detail_logistik_id')
-            ->Join('detail_pesanan_produk', 'detail_pesanan_produk.id', '=', 'detail_logistik.detail_pesanan_produk_id')
-            ->Join('detail_pesanan', 'detail_pesanan.id', '=', 'detail_pesanan_produk.detail_pesanan_id')
-            ->Join('pesanan', 'pesanan.id', '=', 'detail_pesanan.pesanan_id')
-            ->Join('ekatalog', 'ekatalog.pesanan_id', '=', 'pesanan.id')
-            ->Join('penjualan_produk', 'penjualan_produk.id', '=', 'detail_pesanan.penjualan_produk_id')
-            ->Join('detail_penjualan_produk', 'detail_penjualan_produk.penjualan_produk_id', '=', 'penjualan_produk.id')
-            ->Join('produk', 'produk.id', '=', 'detail_penjualan_produk.produk_id')
-            ->Join('logistik', 'logistik.id', '=', 'detail_logistik.logistik_id')
-            ->Join('noseri_detail_pesanan', 'noseri_detail_pesanan.id', '=', 'noseri_logistik.noseri_detail_pesanan_id')
-            ->Join('t_gbj_noseri', 't_gbj_noseri.id', '=', 'noseri_detail_pesanan.t_tfbj_noseri_id')
-            ->Join('noseri_barang_jadi', 'noseri_barang_jadi.id', '=', 't_gbj_noseri.noseri_id')
-            ->where(['noseri_coo.ket' => 'emiindo'])
+
+        $ekat = Ekatalog::pluck('pesanan_id')->toArray();
+
+        $get_coo = NoseriCoo::select('noseri_coo.id','noseri_coo.no_coo',
+        'noseri_barang_jadi.noseri','ekatalog.no_paket','ekatalog.instansi','ekatalog.no_paket','ekatalog.deskripsi',
+        'logistik.tgl_kirim','produk.nama_coo','produk.no_akd','produk.nama','noseri_coo.ket','noseri_coo.tahun','produk.merk'
+        )
+            ->leftJoin('noseri_logistik', 'noseri_logistik.id', '=', 'noseri_coo.noseri_logistik_id')
+            ->leftJoin('noseri_detail_pesanan', 'noseri_detail_pesanan.id', '=', 'noseri_logistik.noseri_detail_pesanan_id')
+            ->leftJoin('t_gbj_noseri', 't_gbj_noseri.id', '=', 'noseri_detail_pesanan.t_tfbj_noseri_id')
+            ->leftJoin('noseri_barang_jadi', 'noseri_barang_jadi.id', '=', 't_gbj_noseri.noseri_id')
+            ->leftJoin('detail_pesanan_produk', 'detail_pesanan_produk.id', '=', 'noseri_detail_pesanan.detail_pesanan_produk_id')
+            ->leftJoin('detail_pesanan', 'detail_pesanan.id', '=', 'detail_pesanan_produk.detail_pesanan_id')
+            ->leftJoin('pesanan', 'pesanan.id', '=', 'detail_pesanan.pesanan_id')
+            ->leftJoin('ekatalog', 'ekatalog.pesanan_id', '=', 'pesanan.id')
+            ->leftJoin('detail_logistik', 'detail_logistik.id', '=', 'noseri_logistik.detail_logistik_id')
+            ->leftJoin('logistik', 'logistik.id', '=', 'detail_logistik.logistik_id')
+            ->leftJoin('gdg_barang_jadi', 'gdg_barang_jadi.id', '=', 'noseri_barang_jadi.gdg_barang_jadi_id')
+            ->leftJoin('produk', 'produk.id', '=', 'gdg_barang_jadi.produk_id')
+             ->where(['noseri_coo.ket' => 'emiindo'])
+             ->whereIN('pesanan.id',$ekat)
             ->whereNotIN('noseri_barang_jadi.noseri', $save_response)
-            ->pluck('noseri_coo.id');
+            ->orderByDesc('noseri_coo.created_at')
+            ->get();
 
-
-        $coo = NoseriCoo::with(['NoseriDetailLogistik.NoseriDetailPesanan.NoseriTGbj.seri.GudangBarangJadi.Produk', 'NoseriDetailLogistik.DetailLogistik.Logistik', 'NoseriDetailLogistik.NoseriDetailPesanan.DetailPesananProduk.DetailPesanan.Pesanan.Ekatalog'])->whereIN('noseri_coo.id', $get_coo)->orderByDesc('created_at')->get();
         $data = array();
-        foreach ($coo as $key_coo => $coo) {
-            $data[$key_coo] = array(
+        foreach ($get_coo as $coo) {
+            $data[] = array(
                 'id' => $coo->id,
-                'no_coo' => $coo->no_coo . '@SKA@' . $this->bulan_romawi($coo->NoseriDetailLogistik->DetailLogistik->Logistik->tgl_kirim) . '@SPA@' . $coo->tahun,
-                'noseri' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->noseri,
-                'tgl_sj' => $coo->NoseriDetailLogistik->DetailLogistik->Logistik->tgl_kirim,
-                'no_akd' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->no_akd,
-                'nama' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->nama_coo,
-                'tipe' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->nama,
-                'merk' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->merk,
-                'instansi' =>  $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->instansi,
-                'no_akn' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->no_paket,
-                'deskripsi' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->deskripsi,
+                'no_coo' => $coo->no_coo . '/SKA/' . $this->bulan_romawi($coo->tgl_kirim) . '/SPA/' . $coo->tahun,
+                 'noseri' => $coo->noseri,
+                'tgl_sj' => $coo->tgl_kirim,
+                 'no_akd' => $coo->no_akd,
+                 'nama' => $coo->nama_coo,
+                 'tipe' => $coo->nama,
+                 'merk' => $coo->merk,
+                'instansi' =>  $coo->instansi,
+                'no_akn' => $coo->no_paket,
+                'deskripsi' =>   $coo->deskripsi,
                 'pic' => $coo->ket == 'spa' ? 'Kusmardiana Rahayu' : 'Bambang Hendro M BE',
             );
         }
 
-
+        // $coo = NoseriCoo::with(['NoseriDetailLogistik.NoseriDetailPesanan.NoseriTGbj.seri.GudangBarangJadi.Produk', 'NoseriDetailLogistik.DetailLogistik.Logistik', 'NoseriDetailLogistik.NoseriDetailPesanan.DetailPesananProduk.DetailPesanan.Pesanan.Ekatalog'])->whereIN('noseri_coo.id', $get_coo)->orderByDesc('created_at')->get();
+        // $data = array();
+        // foreach ($coo as $key_coo => $coo) {
+        //     $data[$key_coo] = array(
+        //         'id' => $coo->id,
+        //         'no_coo' => $coo->no_coo . '/SKA/' . $this->bulan_romawi($coo->NoseriDetailLogistik->DetailLogistik->Logistik->tgl_kirim) . '/SPA/' . $coo->tahun,
+        //         'noseri' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->noseri,
+        //         'tgl_sj' => $coo->NoseriDetailLogistik->DetailLogistik->Logistik->tgl_kirim,
+        //         'no_akd' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->no_akd,
+        //         'nama' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->nama_coo,
+        //         'tipe' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->nama,
+        //         'merk' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->merk,
+        //         'instansi' =>  $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->instansi,
+        //         'no_akn' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->no_po,
+        //         'deskripsi' =>   $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->deskripsi,
+        //         'pic' => $coo->ket == 'spa' ? 'Kusmardiana Rahayu' : 'Bambang Hendro M BE',
+        //     );
+        // }
         return response()->json([
             'status' => 200,
             'message' => 'Berhasil',
             'data' => $data
         ], 200);
-        // return response()->json([
-        //     'status' => 200,
-        //     'message' => 'Berhasil',
-        // ], 200);
     }
+    // public function coo()
+    // {
+    //     $save_response = SaveResponse::where(['tipe' => 'coo', 'response' => 'ok', 'method' => 'post'])->pluck('parameter');
+    //     $get_coo = NoseriCoo::select('noseri_coo.id',)
+    //          ->leftJoin('noseri_logistik', 'noseri_logistik.id', '=', 'noseri_coo.noseri_logistik_id')
+    //         // ->Join('detail_logistik', 'detail_logistik.id', '=', 'noseri_logistik.detail_logistik_id')
+    //         // ->Join('detail_pesanan_produk', 'detail_pesanan_produk.id', '=', 'detail_logistik.detail_pesanan_produk_id')
+    //         // ->Join('detail_pesanan', 'detail_pesanan.id', '=', 'detail_pesanan_produk.detail_pesanan_id')
+    //         // ->Join('pesanan', 'pesanan.id', '=', 'detail_pesanan.pesanan_id')
+    //         // ->Join('ekatalog', 'ekatalog.pesanan_id', '=', 'pesanan.id')
+    //         // ->Join('penjualan_produk', 'penjualan_produk.id', '=', 'detail_pesanan.penjualan_produk_id')
+    //         // ->Join('detail_penjualan_produk', 'detail_penjualan_produk.penjualan_produk_id', '=', 'penjualan_produk.id')
+    //         // ->Join('produk', 'produk.id', '=', 'detail_penjualan_produk.produk_id')
+    //         // ->Join('logistik', 'logistik.id', '=', 'detail_logistik.logistik_id')
+    //         // ->Join('noseri_detail_pesanan', 'noseri_detail_pesanan.id', '=', 'noseri_logistik.noseri_detail_pesanan_id')
+    //         // ->Join('t_gbj_noseri', 't_gbj_noseri.id', '=', 'noseri_detail_pesanan.t_tfbj_noseri_id')
+    //         // ->Join('noseri_barang_jadi', 'noseri_barang_jadi.id', '=', 't_gbj_noseri.noseri_id')
+    //          ->where(['noseri_coo.ket' => 'emiindo'])
+    //         // ->whereNotIN('noseri_barang_jadi.noseri', $save_response)
+    //         ->orderByDesc('noseri_coo.created_at')
+    //         ->pluck('noseri_coo.id');
+
+
+    //     // $coo = NoseriCoo::with(['NoseriDetailLogistik.NoseriDetailPesanan.NoseriTGbj.seri.GudangBarangJadi.Produk', 'NoseriDetailLogistik.DetailLogistik.Logistik', 'NoseriDetailLogistik.NoseriDetailPesanan.DetailPesananProduk.DetailPesanan.Pesanan.Ekatalog'])->whereIN('noseri_coo.id', $get_coo)->orderByDesc('created_at')->get();
+    //     // $data = array();
+    //     // foreach ($coo as $key_coo => $coo) {
+    //     //     $data[$key_coo] = array(
+    //     //         'id' => $coo->id,
+    //     //         'no_coo' => $coo->no_coo . '/SKA/' . $this->bulan_romawi($coo->NoseriDetailLogistik->DetailLogistik->Logistik->tgl_kirim) . '/SPA/' . $coo->tahun,
+    //     //         'noseri' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->noseri,
+    //     //         'tgl_sj' => $coo->NoseriDetailLogistik->DetailLogistik->Logistik->tgl_kirim,
+    //     //         'no_akd' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->no_akd,
+    //     //         'nama' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->nama_coo,
+    //     //         'tipe' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->nama,
+    //     //         'merk' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->NoseriTGbj->seri->GudangBarangJadi->Produk->merk,
+    //     //         'instansi' =>  $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->instansi,
+    //     //         'no_akn' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->no_paket,
+    //     //         'deskripsi' => $coo->NoseriDetailLogistik->NoseriDetailPesanan->DetailPesananProduk->DetailPesanan->Pesanan->Ekatalog->deskripsi,
+    //     //         'pic' => $coo->ket == 'spa' ? 'Kusmardiana Rahayu' : 'Bambang Hendro M BE',
+    //     //     );
+    //     // }
+
+
+    //     return response()->json([
+    //         'jumlah' => count($get_coo),
+    //         'status' => 200,
+    //         'message' => 'Berhasil',
+    //         'data' => $get_coo
+    //     ], 200);
+    //     // return response()->json([
+    //     //     'status' => 200,
+    //     //     'message' => 'Berhasil',
+    //     // ], 200);
+    // }
 
 
     public function pengiriman()
@@ -199,6 +272,7 @@ class PostsController extends Controller
             ->where('ekatalog.customer_id', 213)
             ->whereNotIN('logistik.nosurat', $save_response)
             ->groupby('logistik.nosurat')
+            ->orderByDesc('logistik.created_at')
             ->get());
 
         $logistik_spa = collect(Logistik::with(['DetailLogistik.DetailPesananProduk.GudangBarangJadi.Produk', 'DetailLogistik.NoseriDetailLogistik.NoseriDetailPesanan.NoseriTGbj'])->select(
@@ -222,6 +296,7 @@ class PostsController extends Controller
             ->where('spa.customer_id', 213)
             ->whereNotIN('logistik.nosurat', $save_response)
             ->groupby('logistik.nosurat')
+            ->orderByDesc('logistik.created_at')
             ->get());
 
         $logistik = $logistik_ekat->merge($logistik_spa);
@@ -231,8 +306,7 @@ class PostsController extends Controller
                 'id' => $logistik->id,
                 'no_sj' => $logistik->no_surat,
                 'tgl_sj' => $logistik->tgl_sj,
-                'ekspedisi_id' => $logistik->ekspedisi_id,
-                'pengirim' => $logistik->nama_pengirim,
+                'pengirim' => $logistik->ekspedisi_id != null ? $logistik->nama_ekspedisi : $logistik->nama_pengirim,
                 'no_resi' => $logistik->no_resi,
                 'nopo' => $logistik->po,
                 'tglpo' => $logistik->tglpo,
